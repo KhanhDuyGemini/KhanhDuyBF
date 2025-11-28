@@ -1,59 +1,60 @@
 -- // ⚙️ Cấu hình
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
 
 local scriptName = tostring(getgenv().NScript or "Unknown")
 local inputKey = tostring(getgenv().Key or "")
 
--- // 🔑 Danh sách key hợp lệ (cập nhật từ bot Discord)
--- Nếu bạn đặt `getgenv().ValidKeys` thì script sẽ kiểm tra theo danh sách đó.
--- Nếu không đặt `getgenv().ValidKeys`, script sẽ chấp nhận `getgenv().Key` (không an toàn nhưng cần thiết nếu executor không cho HTTP).
-local VALID_KEYS = getgenv().ValidKeys -- may be nil
+-- // 🌐 API Supabase Function
+local SUPABASE_URL = "https://qoagwkvvhxzjcztxokcq.supabase.co/functions/v1/verify-key"
+local SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvYWd3a3Z2aHh6amN6dHhva2NxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNTQ4NjIsImV4cCI6MjA3OTgzMDg2Mn0.iN0eAzzLRySDe7rFckR-PUnh1PhQJNF7VymyShkxYlk" -- Thay bằng Supabase anon key của bạn
 
--- // 🗝️ Kiểm tra key
+-- // Kiểm tra key trống
 if inputKey == nil or inputKey == "" then
     warn("[KEY] ❌ Key rỗng hoặc không được cung cấp.")
-    local msg = "Thiếu key để xác minh. Vui lòng cấu hình getgenv().Key trước khi chạy."
-    print("[KEY] " .. msg)
-    -- Đợi một chút để user có thể xem console trước khi kick
-    for i = 10, 1, -1 do
-        print("[KEY] 🔔 Kick in " .. i .. "s...")
-        task.wait(1)
-    end
-    LocalPlayer:Kick(msg)
+    print("STATUS:", response.StatusCode)
+    print("BODY:", response.Body)
     return
 end
 
-print("[KEY] 🔍 Đang kiểm tra key: " .. inputKey)
--- // Kiểm tra key trong danh sách hợp lệ (nếu có)
-local keyValid = false
-if VALID_KEYS and type(VALID_KEYS) == "table" and #VALID_KEYS > 0 then
-    for _, validKey in ipairs(VALID_KEYS) do
-        if inputKey == validKey then
-            keyValid = true
-            break
-        end
-    end
-else
-    -- Nếu không có danh sách VALID_KEYS, chấp nhận key đã được cung cấp (getgenv().Key)
-    print("[KEY] ⚠️ Không có danh sách VALID_KEYS; chấp nhận key được cung cấp (không an toàn).")
-    keyValid = true
+-- // 🔑 Gửi yêu cầu xác minh key
+local success, response = pcall(function()
+    return game:HttpGet(SUPABASE_URL .. "?key=" .. inputKey, false, {
+        ["Authorization"] = "Bearer " .. SUPABASE_ANON_KEY,
+        ["Content-Type"] = "application/json"
+    })
+end)
+
+if not success or not response or response == "" then
+    warn("[KEY] ❌ Không thể kết nối đến API key.")
+    print("STATUS:", response.StatusCode)
+    print("BODY:", response.Body)
+    return
 end
 
-if not keyValid then
-    local msg = "❌ Key không hợp lệ hoặc không tồn tại."
-    print("[KEY] " .. msg)
-    -- Provide a short countdown so user can read logs
-    for i = 10, 1, -1 do
-        print("[KEY] 🔔 Kick in " .. i .. "s...")
-        task.wait(1)
-    end
-    LocalPlayer:Kick(msg)
+-- // Giải mã JSON trả về
+local data
+local decodeSuccess, decodeErr = pcall(function()
+    data = HttpService:JSONDecode(response)
+end)
+
+if not decodeSuccess or not data then
+    warn("[KEY] ❌ Lỗi khi đọc phản hồi từ API:", decodeErr)
+    print("STATUS:", response.StatusCode)
+    print("BODY:", response.Body)
+    return
+end
+
+-- // 🔍 Kiểm tra kết quả từ API
+if not data.success then
+    print("STATUS:", response.StatusCode)
+    print("BODY:", response.Body)
     return
 end
 
 -- // ✅ Key hợp lệ
-print("[KEY] ✅ Key hợp lệ!")
+print("[KEY] ✅ Key hợp lệ! Discord ID:", data.discord_id or "Không rõ")
 print("[KEY] 🔄 Đang tải script:", scriptName)
 
 -- // 🚀 Chạy script tương ứng
@@ -76,40 +77,47 @@ elseif scriptName == "MaruKaitunFisch" then
 
     _G.Settings = _G.Settings or {
         ["DefaultPosition"] = (Second_Sea and Second_Sea_Loc) or First_Sea_Loc,
-        ["AfkCheckTime"] = 30,
-        ["AfkFix"] = "Reset",
-        ["EquipRod"] = "Auto",
+        ["AfkCheckTime"] = 30, -- Seconds
+        ["AfkFix"] = "Reset", -- Rejoin, Reset
+        ["EquipRod"] = "Auto", -- Trident Rod, Destiny Rod,... Rod
         ["InstantFishing"] = true,
         ["Return to Sea1"] = {
             ["Obtained All Rods"] = true
         },
         ["SellFish"] = {
-            ["SellDelay"] = 120,
+            ["SellDelay"] = 120, -- Seconds
             ["Enable"] = true,
             ["Method"] = {
                 ["Event"] = true,
                 ["Enchant"] = false,
                 ["Mythical"] = true,
                 ["Legendary"] = true,
-                ["Exotic"] = true
+                ["Exotic"] = true -- recommend to enable it
             }
         },
         ['Rod'] = {
-            Necessary_Rods = {"Steady Rod",
+            -- Necessary Rods: Rods that are required or essential for the gameplay
+            Necessary_Rods = {"Steady Rod", -- First Sea Rod
             "Reinforced Rod", "Depthseeker Rod", "Kraken Rod", "Zeus Rod", "Ethereal Prism Rod", "Free Spirit Rod"},
+
+            -- Custom Rods: Special rods that can be customized after obtained all necessary rods.
             Custom_Rods = {"Aurora Rod", "Tempest Rod", "Abyssal Specter Rod", "Destiny Rod", "Challenger's Rod",
-                           "Rod Of The Zenith", "Nocturnal Rod", "Kings Rod", "Trident Rod",
+                           "Rod Of The Zenith", "Challenger's Rod", "Nocturnal Rod", "Kings Rod", "Trident Rod",
                            "Poseidon Rod", "Champions Rod", "Volcanic Rod", "Summit Rod", "Training Rod", "Plastic Rod",
                            "Carbon Rod", "Long Rod", "Lucky Rod", "Fortune Rod", "Rapid Rod", "Magnet Rod",
                            "Mythical Rod", "Midas Rod", "Scurvy Rod", "Stone Rod", "Phoenix Rod", "Arctic Rod",
-                           "Crystalized Rod", "Ice Warpers Rod", "Avalanche Rod", "Wildflower Rod",
-                           "Firefly Rod", "Frog Rod", "Azure Of Lagoon", "Free Spirit Rod",
+                           "Crystalized Rod", "Ice Warpers Rod", "Avalanche Rod", "Stone Rod", "Wildflower Rod",
+                           "Firefly Rod", "Frog Rod", "Azure Of Lagoon", "Free Spirit Rod", -- need bestinary 70%
             "Verdant Shear Rod", "Great Dreamer Rod"},
-            Puzzle_Rods = {}
+
+            -- Puzzle Rods: Rods that will be available in the future (currently unavailable)
+            Puzzle_Rods = {
+                -- ["Heaven's Rod"] = 400, -- ( name, required level )
+            }
         },
         ["Enchant"] = {
-            ["Enabled"] = true,
-            ["Rod"] = {
+            ["Enabled"] = true, -- Enable or disable the enchantment system
+            ["Rod"] = { -- Specific enchantments for each rod
                 ["Depthseeker Rod"] = {
                     LevelFarm = {"Clever"}
                 },
@@ -129,12 +137,14 @@ elseif scriptName == "MaruKaitunFisch" then
             }
         },
         ["Totems"] = {
-            ["Enabled"] = true,
-            ["ActivationLevel"] = 300,
-            ["DayTotem"] = "Sundial Totem",
-            ["NightTotem"] = "Aurora Totem",
-            ["AutoPurchase"] = true,
-            ["PurchaseLimit"] = {
+            ["Enabled"] = true, -- Enable or disable the totem system
+            ["ActivationLevel"] = 300, -- Level required to activate totems
+
+            ["DayTotem"] = "Sundial Totem", -- Totem used during the day
+            ["NightTotem"] = "Aurora Totem", -- Totem used during the night
+
+            ["AutoPurchase"] = true, -- Enable automatic totem purchasing
+            ["PurchaseLimit"] = { -- Maximum allowed purchases per type
                 ["DayTotem"] = 1,
                 ["NightTotem"] = 1
             }
@@ -142,7 +152,7 @@ elseif scriptName == "MaruKaitunFisch" then
         ['EnabledFishingZones'] = true,
         ["CastZone"] = {
             ['OnLevel'] = 300,
-            ['Ignored_Aurora'] = true,
+            ['Ignored_Aurora'] = true, -- skip farming level when aurora is active
             ['Zones'] = {"Forsaken Veil - Scylla", "Lovestorm Eel", "Orcas Pool", "The Kraken Pool",
                          "Megalodon Default", "The Depths - Serpent", "Great White Shark", "Great Hammerhead Shark",
                          "Whale Shark", "Animal Pool"}
@@ -154,7 +164,7 @@ elseif scriptName == "MaruKaitunFisch" then
             ['Subfix'] = " - ",
             ['Rod Displayed'] = 10
         },
-        ['ShakeMode'] = "Fast",
+        ['ShakeMode'] = "Fast", -- Fast, Fix bug
         ["FpsBoost"] = false,
         ["Black_Screen"] = true
     }
@@ -191,7 +201,7 @@ elseif scriptName == "MaruKaitunBF" then
     repeat
         task.wait()
     until game.Players.LocalPlayer:FindFirstChild("PlayerGui")
-    _G.Team = "Pirate"
+    _G.Team = "Pirate" -- Marine / Pirate
     getgenv().Script_Mode = "Kaitun_Script"
     _G.MainSettings = {
         ["EnabledHOP"] = true,
@@ -282,11 +292,10 @@ elseif scriptName == "MaruKaitunBF" then
         ["Find Tushita"] = false
     }
     loadstring(game:HttpGet("https://raw.githubusercontent.com/Wraith1vs11/Rejoin/refs/heads/main/UGPhone's%20Scripts"))()
-
+    -- // HoHoHub
 elseif scriptName == "HoHoHub" then
     getgenv().NScript = "HohoHub"
     loadstring(game:HttpGet("https://raw.githubusercontent.com/Wraith1vs11/Rejoin/refs/heads/main/UGPhone's%20Scripts"))()
-
 else
     LocalPlayer:Kick("🚫 Không xác định script cần chạy. (scriptName = " .. tostring(scriptName) .. ")")
 end
