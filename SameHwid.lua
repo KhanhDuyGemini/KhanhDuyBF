@@ -13,8 +13,9 @@ local SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 -- // Kiểm tra key trống
 if inputKey == nil or inputKey == "" then
     warn("[KEY] ❌ Key rỗng hoặc không được cung cấp.")
-    print("STATUS:", response.StatusCode)
-    print("BODY:", response.Body)
+    print("SUCCESS:", success)
+    print("RAW RESPONSE:", response)
+
     return
 end
 
@@ -28,8 +29,9 @@ end)
 
 if not success or not response or response == "" then
     warn("[KEY] ❌ Không thể kết nối đến API key.")
-    print("STATUS:", response.StatusCode)
-    print("BODY:", response.Body)
+    print("SUCCESS:", success)
+    print("RAW RESPONSE:", response)
+
     return
 end
 
@@ -41,15 +43,17 @@ end)
 
 if not decodeSuccess or not data then
     warn("[KEY] ❌ Lỗi khi đọc phản hồi từ API:", decodeErr)
-    print("STATUS:", response.StatusCode)
-    print("BODY:", response.Body)
+    print("SUCCESS:", success)
+    print("RAW RESPONSE:", response)
+
     return
 end
 
 -- // 🔍 Kiểm tra kết quả từ API
 if not data.success then
-    print("STATUS:", response.StatusCode)
-    print("BODY:", response.Body)
+    print("SUCCESS:", success)
+    print("RAW RESPONSE:", response)
+
     return
 end
 
